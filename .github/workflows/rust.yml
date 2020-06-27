@@ -13,7 +13,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Dependencies
     - name: Check formatting
       run: |
         rustup component add rustfmt
