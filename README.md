@@ -2,6 +2,8 @@
 
 # trie-rs
 
+This is a personal project so not on crate.io, there are too many trie packages over there.
+
 Very simple trie implementation to have fast implementations of:
  - `common_prefix_search`: give every item in the trie that is
  a prefix of the query
@@ -29,10 +31,20 @@ vec![
     vec!['A', 'l', 'a', 's'],
     vec!['A', 'l', 'a', 's', 'k', 'a'],
 ]);
+
+let mut builder = TrieBuilder::new(build_index);
+builder.push(&"Alabama".bytes().collect::<Vec<_>>());
+builder.push(&"Alaska".bytes().collect::<Vec<_>>());
+builder.push(&"Alas".bytes().collect::<Vec<_>>());
+let trie = builder.build();
+assert_eq!(trie.search(&"Alas".bytes().collect::<Vec<_>>()).unwrap(),
+&vec![
+    vec![65, 108, 97, 115],
+    vec![65, 108, 97, 115, 107, 97],
+]);
 ```
 
 The item stored in the Trie needs eq + Hash as under the hood we use
 a hashmap for fast query. We also need copy because most of the time
 we will use very small items as trie elements, like `char` or `u8` for
-strings, or ints.
-
+strings, or ints. We need `Ord` trait to give consistent results in the search

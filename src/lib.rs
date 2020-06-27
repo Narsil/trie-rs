@@ -25,13 +25,23 @@
 //!     vec!['A', 'l', 'a', 's'],
 //!     vec!['A', 'l', 'a', 's', 'k', 'a'],
 //! ]);
+//!
+//! let mut builder = TrieBuilder::new(build_index);
+//! builder.push(&"Alabama".bytes().collect::<Vec<_>>());
+//! builder.push(&"Alaska".bytes().collect::<Vec<_>>());
+//! builder.push(&"Alas".bytes().collect::<Vec<_>>());
+//! let trie = builder.build();
+//! assert_eq!(trie.search(&"Alas".bytes().collect::<Vec<_>>()).unwrap(),
+//! &vec![
+//!     vec![65, 108, 97, 115],
+//!     vec![65, 108, 97, 115, 107, 97],
+//! ]);
 //! ```
 //!
 //! The item stored in the Trie needs eq + Hash as under the hood we use
 //! a hashmap for fast query. We also need copy because most of the time
 //! we will use very small items as trie elements, like `char` or `u8` for
-//! strings, or ints.
-//!
+//! strings, or ints. We need `Ord` trait to give consistent results in the search
 use std::collections::HashMap;
 use std::hash::Hash;
 
@@ -41,7 +51,7 @@ pub struct TrieBuilder<Label> {
     trie: Trie<Label>,
 }
 
-impl<Label: Eq + Hash + Copy> TrieBuilder<Label> {
+impl<Label: Eq + Hash + Copy + Ord> TrieBuilder<Label> {
     pub fn new(build_search_index: bool) -> Self {
         Self {
             build_search_index,
@@ -76,7 +86,7 @@ pub struct Trie<Label> {
     root: Node<Label>,
 }
 
-fn _build_index<Label: Eq + Hash + Copy>(
+fn _build_index<Label: Eq + Hash + Copy + Ord>(
     node: &mut Node<Label>,
     current_words: &mut Vec<Vec<Label>>,
     prefix: &mut Vec<Label>,
@@ -91,10 +101,12 @@ fn _build_index<Label: Eq + Hash + Copy>(
         current_words.extend(new_words);
         prefix.pop();
     }
-    node.subwords = current_words.clone();
+    let mut words = current_words.clone();
+    words.sort();
+    node.subwords = words;
 }
 
-impl<Label: Eq + Hash + Copy> Trie<Label> {
+impl<Label: Eq + Hash + Copy + Ord> Trie<Label> {
     /// Does a search within the trie in constant time (index is built ahead of time).
     /// ```
     /// use trie_rs::TrieBuilder;
@@ -203,5 +215,78 @@ impl<Label> Default for Node<Label> {
             subwords: vec![],
             children: HashMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_common_prefix_search() {
+        let mut builder = TrieBuilder::new(false);
+        builder.push(&vec!['A', 'l', 'a', 'b', 'a', 'm', 'a']);
+        builder.push(&vec!['A', 'l', 'a', 's', 'k', 'a']);
+        builder.push(&vec!['A', 'l', 'a', 's']);
+        let trie = builder.build();
+
+        let empty: Vec<Vec<char>> = vec![];
+        assert_eq!(trie.common_prefix_search(&vec![]), empty);
+        assert_eq!(trie.common_prefix_search(&vec!['A', 'l',]), empty);
+        assert_eq!(
+            trie.common_prefix_search(&vec!['A', 'l', 'a', 's']),
+            vec![vec!['A', 'l', 'a', 's']]
+        );
+        assert_eq!(
+            trie.common_prefix_search(&vec!['A', 'l', 'a', 's', 'k']),
+            vec![vec!['A', 'l', 'a', 's']]
+        );
+        assert_eq!(
+            trie.common_prefix_search(&vec!['A', 'l', 'a', 's', 's']),
+            vec![vec!['A', 'l', 'a', 's']]
+        );
+        assert_eq!(
+            trie.common_prefix_search(&vec!['A', 'l', 'a', 's', 'k', 'a']),
+            vec![vec!['A', 'l', 'a', 's'], vec!['A', 'l', 'a', 's', 'k', 'a'],]
+        );
+    }
+
+    #[test]
+    fn test_search() {
+        let mut builder = TrieBuilder::new(false);
+        builder.push(&vec!['A', 'l', 'a', 'b', 'a', 'm', 'a']);
+        builder.push(&vec!['A', 'l', 'a', 's', 'k', 'a']);
+        builder.push(&vec!['A', 'l', 'a', 's']);
+        let trie = builder.build();
+        match trie.search(&vec!['M', 'o', 'n', 't', 'a', 'n', 'a']) {
+            Err(TrieError::IndexNotBuilt) => (),
+            _ => assert!(false, "We exepcted not found error here"),
+        }
+
+        let mut builder = TrieBuilder::new(true);
+        builder.push(&vec!['A', 'l', 'a', 'b', 'a', 'm', 'a']);
+        builder.push(&vec!['A', 'l', 'a', 's', 'k', 'a']);
+        builder.push(&vec!['A', 'l', 'a', 's']);
+        let trie = builder.build();
+        match trie.search(&vec!['M', 'o', 'n', 't', 'a', 'n', 'a']) {
+            Err(TrieError::NoResultFound) => (),
+            _ => assert!(false, "We exepcted not found error here"),
+        }
+        assert_eq!(
+            trie.search(&vec!['A', 'l', 'a',]).unwrap(),
+            &vec![
+                vec!['A', 'l', 'a', 'b', 'a', 'm', 'a'],
+                vec!['A', 'l', 'a', 's'],
+                vec!['A', 'l', 'a', 's', 'k', 'a'],
+            ]
+        );
+        assert_eq!(
+            trie.search(&vec!['A',]).unwrap(),
+            &vec![
+                vec!['A', 'l', 'a', 'b', 'a', 'm', 'a'],
+                vec!['A', 'l', 'a', 's'],
+                vec!['A', 'l', 'a', 's', 'k', 'a'],
+            ]
+        );
     }
 }
